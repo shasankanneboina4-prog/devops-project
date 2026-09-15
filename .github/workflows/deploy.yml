@@ -1,8 +1,14 @@
 name: Deploy to AWS ECS
 
+on:
+  push:
+    branches:
+      - main
+
 permissions:
   id-token: write
   contents: read
+
 env:
   AWS_REGION: eu-north-1
   ECR_REPOSITORY: devops-project
@@ -23,6 +29,7 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
