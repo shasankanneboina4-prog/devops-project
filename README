@@ -1,0 +1,559 @@
+![alt text](image.png)
+![alt text](image-1.png)
+# 🚀 Flask Application — AWS ECS Fargate CI/CD
+
+A production-style **Flask application deployment on AWS ECS Fargate** using **GitHub Actions, OIDC authentication, Amazon ECR, Application Load Balancer, and Amazon CloudWatch**.
+
+This project demonstrates a secure, automated, containerized CI/CD pipeline where code changes pushed to GitHub are automatically built, containerized, pushed to Amazon ECR, and deployed to ECS Fargate.
+
+---
+
+## 🏗️ Architecture
+
+```text
+                         ┌──────────────┐
+                         │   Developer  │
+                         └──────┬───────┘
+                                │
+                                │ Push Code
+                                ▼
+                         ┌──────────────┐
+                         │    GitHub    │
+                         └──────┬───────┘
+                                │
+                                │ Trigger Workflow
+                                ▼
+                    ┌────────────────────────┐
+                    │    GitHub Actions      │
+                    │                        │
+                    │ Build Docker Image     │
+                    │ Authenticate via OIDC  │
+                    └───────┬─────────┬──────┘
+                            │         │
+                         OIDC│         │ Push Image
+                            ▼         ▼
+                     ┌──────────┐  ┌──────────────┐
+                     │ AWS IAM  │  │ Amazon ECR   │
+                     │          │  │              │
+                     │ Federated│  │ Docker Image │
+                     │ Access   │  │ Repository   │
+                     └──────────┘  └──────┬───────┘
+                                          │
+                                          │ Pull Image
+                                          ▼
+                                  ┌────────────────┐
+                                  │  ECS Fargate   │
+                                  │                │
+                                  │ Flask Container│
+                                  └───────┬────────┘
+                                          │
+                                          ▼
+                               ┌────────────────────┐
+                               │ Application Load   │
+                               │ Balancer (ALB)      │
+                               └─────────┬──────────┘
+                                         │
+                                         ▼
+                               ┌────────────────────┐
+                               │ Flask Application  │
+                               │                    │
+                               │  /                 │
+                               │  /health           │
+                               └─────────┬──────────┘
+                                         │
+                                         ▼
+                               ┌────────────────────┐
+                               │   Amazon           │
+                               │   CloudWatch       │
+                               │                    │
+                               │ • Logs             │
+                               │ • Container        │
+                               │   Insights         │
+                               │ • CPU Monitoring   │
+                               │ • Memory Monitoring│
+                               │ • CPU Alarm        │
+                               │ • Memory Alarm     │
+                               └────────────────────┘
+```
+
+---
+
+## 🎯 Project Overview
+
+The goal of this project is to implement a reliable and secure deployment pipeline for a containerized Flask application.
+
+### Deployment workflow
+
+1. Developer pushes code to GitHub.
+2. GitHub Actions automatically starts the CI/CD workflow.
+3. GitHub Actions authenticates with AWS using **OIDC**.
+4. AWS IAM provides temporary permissions through a federated role.
+5. Docker image is built.
+6. Docker image is pushed to **Amazon ECR**.
+7. **ECS Fargate** pulls the latest container image.
+8. The Flask application runs as an ECS task.
+9. **Application Load Balancer** routes HTTP traffic to the application.
+10. **CloudWatch** collects logs and application/container metrics.
+11. CPU and memory alarms monitor the running service.
+
+---
+
+## ☁️ AWS Services Used
+
+| Service                       | Purpose                                 |
+| ----------------------------- | --------------------------------------- |
+| **AWS IAM**                   | Secure authentication and authorization |
+| **Amazon ECR**                | Stores Docker container images          |
+| **Amazon ECS**                | Container orchestration                 |
+| **AWS Fargate**               | Serverless container compute            |
+| **Application Load Balancer** | Routes incoming application traffic     |
+| **Amazon CloudWatch**         | Monitoring, logging, metrics and alarms |
+| **GitHub Actions**            | CI/CD automation                        |
+| **GitHub OIDC**               | Secure passwordless AWS authentication  |
+
+---
+
+## 🔐 Secure AWS Authentication with OIDC
+
+This project avoids storing long-lived AWS access keys inside GitHub.
+
+Instead:
+
+```text
+GitHub Actions
+      │
+      │ OIDC Token
+      ▼
+   AWS IAM
+      │
+      │ Assume Role
+      ▼
+Temporary AWS Credentials
+```
+
+### Benefits
+
+* 🔒 No permanent AWS access keys in GitHub
+* 🔄 Temporary credentials
+* 🎯 Fine-grained IAM permissions
+* 🛡️ Reduced credential-leak risk
+* 🤖 Fully automated deployments
+
+The GitHub Actions workflow assumes an AWS IAM role using **OIDC federation**.
+
+---
+
+## 🐳 Docker
+
+The Flask application is packaged as a Docker container.
+
+Example workflow:
+
+```bash
+docker build -t flask-app .
+docker tag flask-app:latest <ECR_REPOSITORY_URI>:latest
+docker push <ECR_REPOSITORY_URI>:latest
+```
+
+The image is stored in:
+
+```text
+Amazon ECR
+     │
+     └── Flask Application Image
+```
+
+ECS Fargate then pulls the image from ECR when deploying the application.
+
+---
+
+## 🔄 CI/CD Pipeline
+
+The CI/CD pipeline follows this flow:
+
+```text
+Git Push
+   ↓
+GitHub Actions
+   ↓
+Checkout Source
+   ↓
+Configure AWS via OIDC
+   ↓
+Login to Amazon ECR
+   ↓
+Build Docker Image
+   ↓
+Push Image to ECR
+   ↓
+Deploy to ECS
+   ↓
+ECS Fargate
+   ↓
+Application Load Balancer
+   ↓
+Flask Application
+```
+
+This removes the need for manual server deployments.
+
+---
+
+## 🧪 Flask Application
+
+The application provides two basic endpoints.
+
+### Home
+
+```http
+GET /
+```
+
+Used as the primary application endpoint.
+
+### Health Check
+
+```http
+GET /health
+```
+
+Example response:
+
+```json
+{
+  "status": "healthy"
+}
+```
+
+The health endpoint can be used by the Application Load Balancer and monitoring systems to determine whether the application is responding correctly.
+
+---
+
+## ❤️ Health Checks
+
+The `/health` endpoint provides a lightweight application health check.
+
+Example:
+
+```python
+@app.route("/health")
+def health():
+    return {"status": "healthy"}, 200
+```
+
+This helps ensure that traffic is sent only to healthy application tasks.
+
+---
+
+## 📊 Monitoring & Observability
+
+Amazon CloudWatch is used to monitor the ECS deployment.
+
+### CloudWatch Logs
+
+Application and container logs can be collected centrally for:
+
+* Debugging
+* Error investigation
+* Application monitoring
+* Deployment troubleshooting
+
+### Container Insights
+
+Container Insights provides ECS/Fargate metrics and operational visibility.
+
+### CPU Monitoring
+
+Tracks CPU utilization of the ECS service.
+
+### Memory Monitoring
+
+Tracks memory utilization of running containers.
+
+---
+
+## 🚨 CloudWatch Alarms
+
+The project includes monitoring alarms for resource utilization.
+
+### CPU Alarm 🟢
+
+Monitors excessive CPU usage.
+
+```text
+CPU Usage
+   │
+   ├── Normal → Healthy
+   │
+   └── High → Alarm
+```
+
+### Memory Alarm 🟢
+
+Monitors excessive memory utilization.
+
+```text
+Memory Usage
+   │
+   ├── Normal → Healthy
+   │
+   └── High → Alarm
+```
+
+These alarms provide an early warning when the application requires investigation or additional resources.
+
+---
+
+## 📁 Project Structure
+
+```text
+.
+├── .github/
+│   └── workflows/
+│       └── deploy.yml
+│
+├── app.py
+├── requirements.txt
+├── Dockerfile
+├── .dockerignore
+└── README.md
+```
+
+---
+
+## 🛠️ Technologies
+
+### Application
+
+* Python
+* Flask
+* Gunicorn
+
+### Containerization
+
+* Docker
+
+### CI/CD
+
+* GitHub
+* GitHub Actions
+* GitHub OIDC
+
+### AWS
+
+* IAM
+* ECR
+* ECS
+* Fargate
+* Application Load Balancer
+* CloudWatch
+
+---
+
+## 🚀 Deployment
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/<your-username>/<repository-name>.git
+cd <repository-name>
+```
+
+### 2. Build the Docker image
+
+```bash
+docker build -t flask-app .
+```
+
+### 3. Run locally
+
+```bash
+docker run -p 5000:5000 flask-app
+```
+
+Open:
+
+```text
+http://localhost:5000
+```
+
+Health check:
+
+```text
+http://localhost:5000/health
+```
+
+---
+
+## ⚙️ GitHub Actions
+
+The workflow automates:
+
+```text
+Checkout
+   ↓
+AWS OIDC Authentication
+   ↓
+ECR Authentication
+   ↓
+Docker Build
+   ↓
+Docker Push
+   ↓
+ECS Deployment
+```
+
+A typical workflow file is:
+
+```text
+.github/workflows/deploy.yml
+```
+
+Secrets and credentials should not contain long-lived AWS access keys when OIDC is configured.
+
+---
+
+## 🔑 IAM Security
+
+The GitHub Actions IAM role should follow the **principle of least privilege**.
+
+Permissions should be limited to the AWS resources required by the deployment process, such as:
+
+```text
+ECR
+ ├── Authenticate
+ ├── Push Image
+ └── Describe Repository
+
+ECS
+ ├── Register Task Definition
+ ├── Update Service
+ └── Describe Deployment
+```
+
+Avoid granting unnecessary:
+
+```text
+AdministratorAccess
+```
+
+to the GitHub Actions role.
+
+---
+
+## 🌐 Application Traffic Flow
+
+```text
+Internet
+   │
+   ▼
+Application Load Balancer
+   │
+   ▼
+ECS Fargate Service
+   │
+   ▼
+Flask Container
+   │
+   ├── GET /
+   │
+   └── GET /health
+```
+
+The ALB provides a stable entry point while ECS manages the underlying container tasks.
+
+---
+
+## 📈 Observability Flow
+
+```text
+Flask Container
+      │
+      ├──────────────► CloudWatch Logs
+      │
+      ├──────────────► CPU Metrics
+      │
+      ├──────────────► Memory Metrics
+      │
+      └──────────────► Container Insights
+                              │
+                              ▼
+                       CloudWatch Alarms
+                         ├── CPU Alarm
+                         └── Memory Alarm
+```
+
+---
+
+## 🔒 Security Highlights
+
+This architecture follows several cloud security best practices:
+
+* ✅ GitHub OIDC instead of long-lived AWS keys
+* ✅ IAM role-based authentication
+* ✅ Least-privilege IAM permissions
+* ✅ Containerized application
+* ✅ No server management with Fargate
+* ✅ Centralized CloudWatch logging
+* ✅ Resource monitoring
+* ✅ Automated health checks
+* ✅ Automated CI/CD deployment
+
+---
+
+## 💡 Key DevOps Concepts Demonstrated
+
+This project demonstrates practical experience with:
+
+* CI/CD pipelines
+* Infrastructure deployment on AWS
+* Docker containerization
+* GitHub Actions
+* OIDC federation
+* IAM roles and permissions
+* Amazon ECR
+* ECS Fargate
+* Application Load Balancer
+* Health checks
+* CloudWatch monitoring
+* Container observability
+* CPU and memory alerting
+* Secure cloud authentication
+
+---
+
+## 🏆 Project Highlights
+
+> **GitHub → GitHub Actions → AWS OIDC → IAM → ECR → ECS Fargate → ALB → Flask → CloudWatch**
+
+A fully automated, containerized AWS deployment pipeline designed with **security, automation, scalability, and observability** in mind.
+
+---
+
+## 📌 Future Improvements
+
+Potential enhancements include:
+
+* [ ] Terraform infrastructure as code
+* [ ] ECS service auto scaling
+* [ ] Blue/Green deployments
+* [ ] HTTPS using ACM
+* [ ] Route 53 custom domain
+* [ ] WAF integration
+* [ ] Multi-environment deployment
+* [ ] Automated unit tests
+* [ ] Security scanning for Docker images
+* [ ] Trivy/ECR image vulnerability scanning
+* [ ] Slack/Email deployment notifications
+* [ ] CloudWatch dashboard
+* [ ] Deployment rollback strategy
+
+---
+
+## 👨‍💻 Author
+
+**Your Name**
+
+DevOps | AWS | Docker | CI/CD | Python
+
+⭐ If you found this project useful, consider giving the repository a star!
